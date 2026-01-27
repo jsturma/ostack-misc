@@ -1,0 +1,59 @@
+# Backup directories
+/backup/
+/backups/
+*.raw
+*.qcow2
+*.vmdk
+*.vdi
+*.img
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Credentials and secrets
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*secret*
+*password*
+*credential*
+.env
+.env.local
+secrets/
+
+# OpenStack specific
+openrc
+openstackrc
+clouds.yaml
+secure.yaml
+
+# Script output
+*.out
+*.err
+
+# Test files
+test/
+tests/
+*.test
