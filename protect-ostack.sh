@@ -4,6 +4,7 @@ set -euo pipefail
 # Configuration
 DISCOVER_ALL_VMS=true
 VM_NAME_FILTER=""
+VM_TAG_FILTER=""
 VM_LIST=("vm1" "vm2")
 KEYSTONE_URL=""
 CINDER_URL=""
@@ -28,9 +29,10 @@ Usage: $0 [OPTIONS]
 
 Required: --keystone-url URL --project NAME --user NAME --password PASSWORD
 Optional: [--cinder-url URL] [--nova-url URL] [--glance-url URL] [--domain NAME]
-         [--backup-dir DIR] [--disk-format FORMAT] [--discover-all] [--vm-filter PATTERN] [--vm-list VM1 VM2 ...]
+         [--backup-dir DIR] [--disk-format FORMAT] [--discover-all] [--vm-filter PATTERN] [--vm-tags KEY:VALUE] [--vm-list VM1 VM2 ...]
          [--help]
          Format options: qcow2 (default), raw, vmdk, vdi
+         Tag filter: --vm-tags backup:true or --vm-tags env:prod,team:ops
 
 Examples:
   $0 --keystone-url https://keystone.example.com:5000/v3 --project myproject --user myuser --password mypass
@@ -61,6 +63,7 @@ parse_arguments() {
       --discover-all) DISCOVER_ALL_VMS=true; shift ;;
       --no-discover-all) DISCOVER_ALL_VMS=false; shift ;;
       --vm-filter) VM_NAME_FILTER="$2"; shift 2 ;;
+      --vm-tags) VM_TAG_FILTER="$2"; shift 2 ;;
       --vm-list)
         shift; VM_LIST=()
         while [[ $# -gt 0 ]] && [[ ! "$1" =~ ^-- ]]; do VM_LIST+=("$1"); shift; done
@@ -171,15 +174,49 @@ cleanup_resource() {
   curl -s -f -X DELETE "$url" -H "X-Auth-Token: $TOKEN" >/dev/null 2>&1 || log "Warning: Failed to delete $type: $id"
 }
 
+validate_openstack_vm() {
+  local vm_id=$1 vm_data
+  [[ -z "$vm_id" ]] && return 1
+  vm_data=$(curl -s -H "X-Auth-Token: $TOKEN" "$NOVA_URL/servers/$vm_id")
+  [[ -z "$vm_data" ]] && return 1
+  echo "$vm_data" | jq -e '.server.id' >/dev/null 2>&1 || return 1
+  echo "$vm_data" | jq -e '.server.name' >/dev/null 2>&1 || return 1
+  echo "$vm_data" | jq -e '.server.status' >/dev/null 2>&1 || return 1
+  return 0
+}
+
+is_vm_backup_supported() {
+  local vm_status=$1
+  case "$vm_status" in
+    ACTIVE|SHUTOFF|PAUSED|SUSPENDED) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 get_vm_id() {
-  local vm_id
-  vm_id=$(curl -s -H "X-Auth-Token: $TOKEN" "$NOVA_URL/servers?name=$1" | jq -r ".servers[0].id//empty")
+  local vm_id vm_data
+  vm_data=$(curl -s -H "X-Auth-Token: $TOKEN" "$NOVA_URL/servers?name=$1")
+  vm_id=$(echo "$vm_data" | jq -r ".servers[0].id//empty")
   [[ -z "$vm_id" || "$vm_id" == "null" ]] && return 1
+  validate_openstack_vm "$vm_id" || return 1
   echo "$vm_id"
 }
 
 get_attached_volumes() {
   curl -s -H "X-Auth-Token: $TOKEN" "$CINDER_URL/volumes?all_tenants=1" | jq -r ".volumes[]|select(.attachments[]?.server_id==\"$1\")|.id"
+}
+
+check_vm_tags() {
+  local vm_id=$1 vm_metadata tag_key tag_value expected_value actual_value
+  [[ -z "$VM_TAG_FILTER" ]] && return 0
+  vm_metadata=$(curl -s -H "X-Auth-Token: $TOKEN" "$NOVA_URL/servers/$vm_id" | jq -r '.server.metadata//{}')
+  IFS=',' read -ra TAGS <<< "$VM_TAG_FILTER"
+  for tag_pair in "${TAGS[@]}"; do
+    IFS=':' read -r tag_key expected_value <<< "$tag_pair"
+    actual_value=$(echo "$vm_metadata" | jq -r ".[\"$tag_key\"]//empty")
+    [[ "$actual_value" != "$expected_value" ]] && return 1
+  done
+  return 0
 }
 
 discover_all_vms() {
@@ -194,7 +231,10 @@ discover_all_vms() {
     vm_status=$(echo "$vm_data" | jq -r '.status//empty')
     [[ -z "$vm_name" || "$vm_name" == "null" || -z "$vm_id" || "$vm_id" == "null" ]] && continue
     [[ "$vm_status" == "ERROR" || "$vm_status" == "DELETED" ]] && log "Skipping $vm_name ($vm_status)" && continue
+    is_vm_backup_supported "$vm_status" || log "Skipping $vm_name (unsupported status: $vm_status)" && continue
     [[ -n "$VM_NAME_FILTER" ]] && case "$vm_name" in $VM_NAME_FILTER) ;; *) continue ;; esac
+    [[ -n "$VM_TAG_FILTER" ]] && check_vm_tags "$vm_id" || continue
+    validate_openstack_vm "$vm_id" || log "Skipping $vm_name (invalid OpenStack VM structure)" && continue
     echo "$vm_name|$vm_id"
   done < <(echo "$response" | jq -c '.servers[]?')
   
@@ -208,7 +248,10 @@ discover_all_vms() {
       vm_status=$(echo "$vm_data" | jq -r '.status//empty')
       [[ -z "$vm_name" || "$vm_name" == "null" || -z "$vm_id" || "$vm_id" == "null" ]] && continue
       [[ "$vm_status" == "ERROR" || "$vm_status" == "DELETED" ]] && continue
+      is_vm_backup_supported "$vm_status" || continue
       [[ -n "$VM_NAME_FILTER" ]] && case "$vm_name" in $VM_NAME_FILTER) ;; *) continue ;; esac
+      [[ -n "$VM_TAG_FILTER" ]] && check_vm_tags "$vm_id" || continue
+      validate_openstack_vm "$vm_id" || continue
       echo "$vm_name|$vm_id"
     done < <(echo "$response" | jq -c '.servers[]?')
     next_link=$(echo "$response" | jq -r '.servers_links[]?|select(.rel=="next")|.href//empty')
@@ -283,13 +326,15 @@ discover_service_endpoints "$catalog_json"
 log "Endpoints - Cinder: $CINDER_URL, Nova: $NOVA_URL, Glance: $GLANCE_URL"
 
 if [[ "$DISCOVER_ALL_VMS" == "true" ]]; then
-  [[ -n "$VM_NAME_FILTER" ]] && log "VM filter: $VM_NAME_FILTER"
+  [[ -n "$VM_NAME_FILTER" ]] && log "VM name filter: $VM_NAME_FILTER"
+  [[ -n "$VM_TAG_FILTER" ]] && log "VM tag filter: $VM_TAG_FILTER"
   VM_DATA=$(discover_all_vms)
   [[ -z "$VM_DATA" ]] && log "No VMs found" && exit 0
   log "Discovered $(echo "$VM_DATA" | wc -l | tr -d ' ') VM(s)"
   
   while IFS='|' read -r VM VM_ID; do
     [[ -z "$VM" || -z "$VM_ID" ]] && continue
+    validate_openstack_vm "$VM_ID" || log "Skipping $VM (invalid OpenStack VM)" && continue
     log "==== VM: $VM (ID: $VM_ID) ===="
     VM_DIR="$BACKUP_DIR/$VM/$(date +%F_%H-%M)"
     mkdir -p "$VM_DIR"
@@ -306,7 +351,8 @@ else
   for VM in "${VM_LIST[@]}"; do
     log "==== VM: $VM ===="
     VM_ID=$(get_vm_id "$VM" || true)
-    [[ -z "$VM_ID" ]] && log "VM '$VM' not found" && continue
+    [[ -z "$VM_ID" ]] && log "VM '$VM' not found or invalid" && continue
+    validate_openstack_vm "$VM_ID" || log "VM '$VM' is not a valid OpenStack server" && continue
     VM_DIR="$BACKUP_DIR/$VM/$(date +%F_%H-%M)"
     mkdir -p "$VM_DIR"
     backup_vm_config "$VM_ID" "$VM_DIR"

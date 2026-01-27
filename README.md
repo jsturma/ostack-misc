@@ -10,7 +10,8 @@ A bash script for backing up OpenStack VMs and their attached Cinder volumes. Th
 - **Volume Backup**: Creates snapshots, temporary volumes, and images to download RAW backups
 - **Automatic Cleanup**: Cleans up temporary resources (snapshots, volumes, images) after backup
 - **Error Handling**: Comprehensive error handling with timeouts and status checks
-- **Flexible Filtering**: Filter VMs by name pattern
+- **Flexible Filtering**: Filter VMs by name pattern or metadata tags
+- **OpenStack Compatibility**: Validates VMs are valid OpenStack servers and only processes backup-supported VM states
 - **Pagination Support**: Handles large VM lists with pagination
 
 ## Requirements
@@ -92,6 +93,39 @@ Backup only VMs matching a name pattern:
   --vm-filter "prod-*"
 ```
 
+### With VM Tag Filtering
+
+Backup only VMs that have specific metadata tags. Tags are checked as key:value pairs:
+
+```bash
+# Single tag: backup only VMs with backup=true
+./protect-ostack.sh \
+  --keystone-url https://keystone.example.com:5000/v3 \
+  --project myproject \
+  --user myuser \
+  --password mypass \
+  --vm-tags backup:true
+
+# Multiple tags: backup VMs with both env=prod AND team=ops (all must match)
+./protect-ostack.sh \
+  --keystone-url https://keystone.example.com:5000/v3 \
+  --project myproject \
+  --user myuser \
+  --password mypass \
+  --vm-tags env:prod,team:ops
+
+# Combine with name filter
+./protect-ostack.sh \
+  --keystone-url https://keystone.example.com:5000/v3 \
+  --project myproject \
+  --user myuser \
+  --password mypass \
+  --vm-filter "prod-*" \
+  --vm-tags backup:enabled
+```
+
+**Note**: Tag filtering requires fetching full VM details for each VM, which may be slower for large deployments. Use name filtering first to reduce the number of VMs checked.
+
 ### Manual VM List
 
 Specify VMs manually instead of auto-discovery:
@@ -162,6 +196,7 @@ Supported formats: `qcow2` (default), `raw`, `vmdk`, `vdi`
 - `--discover-all` - Discover all VMs automatically (default: `true`)
 - `--no-discover-all` - Disable automatic VM discovery
 - `--vm-filter PATTERN` - Filter VMs by name pattern (e.g., `"prod-*"`, `"web-*"`)
+- `--vm-tags KEY:VALUE[,KEY2:VALUE2]` - Filter VMs by metadata tags (all tags must match)
 - `--vm-list VM1 VM2 ...` - Manual VM list (disables auto-discovery)
 - `--help` or `-h` - Show usage information
 
@@ -169,7 +204,16 @@ Supported formats: `qcow2` (default), `raw`, `vmdk`, `vdi`
 
 1. **Authentication**: Authenticates with Keystone and retrieves the service catalog
 2. **Endpoint Discovery**: Extracts Cinder, Nova, and Glance endpoints from the service catalog
-3. **VM Discovery**: Discovers all VMs (or uses manual list) and filters by status and name pattern
+3. **VM Discovery**: Discovers all VMs (or uses manual list) and filters by:
+   - **OpenStack Validation**: Validates that VMs are valid OpenStack servers with required fields (id, name, status)
+   - **Status Filtering**: Only processes VMs in backup-supported states:
+     - `ACTIVE` - Running VMs
+     - `SHUTOFF` - Stopped VMs
+     - `PAUSED` - Paused VMs
+     - `SUSPENDED` - Suspended VMs
+   - Skips VMs in unsupported states: `ERROR`, `DELETED`, `BUILDING`, `MIGRATING`, etc.
+   - Name pattern (if `--vm-filter` is specified)
+   - Metadata tags (if `--vm-tags` is specified, all tags must match)
 4. **VM Configuration Backup** (for each VM):
    - Retrieves complete VM details from Nova API
    - Saves VM configuration as JSON file (`vm-config.json`)
@@ -290,7 +334,10 @@ done
 
 - Verify the user has permissions to list servers in Nova
 - Check if `all_tenants=1` parameter is required (script includes it)
-- Ensure VMs are not in ERROR or DELETED state (these are automatically skipped)
+- **VM Status**: Only VMs in `ACTIVE`, `SHUTOFF`, `PAUSED`, or `SUSPENDED` states are backed up. VMs in `ERROR`, `DELETED`, `BUILDING`, `MIGRATING`, or other states are automatically skipped
+- **OpenStack Validation**: The script validates that discovered VMs are valid OpenStack servers. If a VM doesn't have required OpenStack fields (id, name, status), it will be skipped with a warning
+- **Tag Filtering Performance**: Tag filtering requires fetching full VM details for each VM, which can be slow for large deployments. Consider using `--vm-filter` first to reduce the number of VMs before applying tag filters
+- **Tag Filtering**: Ensure VMs have the expected metadata tags set. Tags are case-sensitive and must match exactly (e.g., `backup:true` vs `backup:True` are different)
 
 ### VM Configuration Backup Issues
 
@@ -345,8 +392,6 @@ Contributions are welcome! Please ensure:
 - Script size stays under 20KB
 - All functionality is tested
 - Error handling is comprehensive
-
-## License
 
 ## License
 
