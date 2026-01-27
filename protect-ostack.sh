@@ -207,14 +207,34 @@ get_attached_volumes() {
 }
 
 check_vm_tags() {
-  local vm_id=$1 vm_metadata tag_key tag_value expected_value actual_value
+  local vm_id=$1 vm_tags vm_metadata tag_key expected_value actual_value found
   [[ -z "$VM_TAG_FILTER" ]] && return 0
-  vm_metadata=$(curl -s -H "X-Auth-Token: $TOKEN" "$NOVA_URL/servers/$vm_id" | jq -r '.server.metadata//{}')
+  
+  # Try OpenStack server tags endpoint (/servers/{server_id}/tags)
+  vm_tags=$(curl -s -f -H "X-Auth-Token: $TOKEN" "$NOVA_URL/servers/$vm_id/tags" 2>/dev/null | jq -r '.tags[]?//empty' 2>/dev/null)
+  
+  # Try metadata endpoint (/servers/{server_id}/metadata)
+  vm_metadata=$(curl -s -f -H "X-Auth-Token: $TOKEN" "$NOVA_URL/servers/$vm_id/metadata" 2>/dev/null | jq -r '.metadata//{}' 2>/dev/null)
+  
   IFS=',' read -ra TAGS <<< "$VM_TAG_FILTER"
   for tag_pair in "${TAGS[@]}"; do
     IFS=':' read -r tag_key expected_value <<< "$tag_pair"
-    actual_value=$(echo "$vm_metadata" | jq -r ".[\"$tag_key\"]//empty")
-    [[ "$actual_value" != "$expected_value" ]] && return 1
+    found=0
+    
+    # Check OpenStack tags (tags are just names, no values)
+    if [[ -n "$vm_tags" ]]; then
+      while IFS= read -r tag; do
+        [[ -n "$tag" && "$tag" == "$tag_key" ]] && found=1 && break
+      done <<< "$vm_tags"
+    fi
+    
+    # Check metadata (key:value pairs)
+    if [[ $found -eq 0 ]] && [[ -n "$vm_metadata" && "$vm_metadata" != "{}" ]]; then
+      actual_value=$(echo "$vm_metadata" | jq -r ".[\"$tag_key\"]//empty")
+      [[ -n "$actual_value" && "$actual_value" == "$expected_value" ]] && found=1
+    fi
+    
+    [[ $found -eq 0 ]] && return 1
   done
   return 0
 }
@@ -259,11 +279,32 @@ discover_all_vms() {
 }
 
 backup_vm_config() {
-  local vm_id=$1 backup_dir=$2 response
+  local vm_id=$1 backup_dir=$2 response vm_tags vm_metadata
   log "Backing up VM configuration"
   response=$(curl -s -H "X-Auth-Token: $TOKEN" "$NOVA_URL/servers/$vm_id")
   echo "$response" | jq '.' > "$backup_dir/vm-config.json" || log "Warning: Failed to save VM config"
-  log "VM configuration saved to vm-config.json"
+  
+  log "Backing up VM tags"
+  vm_tags=$(curl -s -f -H "X-Auth-Token: $TOKEN" "$NOVA_URL/servers/$vm_id/tags" 2>/dev/null)
+  if [[ -n "$vm_tags" ]]; then
+    echo "$vm_tags" | jq '.' > "$backup_dir/vm-tags.json" 2>/dev/null || log "Warning: Failed to save VM tags"
+    log "VM tags saved to vm-tags.json"
+  else
+    echo '{"tags":[]}' > "$backup_dir/vm-tags.json"
+    log "No tags found, saved empty tags file"
+  fi
+  
+  log "Backing up VM metadata"
+  vm_metadata=$(curl -s -f -H "X-Auth-Token: $TOKEN" "$NOVA_URL/servers/$vm_id/metadata" 2>/dev/null)
+  if [[ -n "$vm_metadata" ]]; then
+    echo "$vm_metadata" | jq '.' > "$backup_dir/vm-metadata.json" 2>/dev/null || log "Warning: Failed to save VM metadata"
+    log "VM metadata saved to vm-metadata.json"
+  else
+    echo '{"metadata":{}}' > "$backup_dir/vm-metadata.json"
+    log "No metadata found, saved empty metadata file"
+  fi
+  
+  log "VM configuration, tags, and metadata saved"
 }
 
 backup_volume() {

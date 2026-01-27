@@ -95,10 +95,28 @@ Backup only VMs matching a name pattern:
 
 ### With VM Tag Filtering
 
-Backup only VMs that have specific metadata tags. Tags are checked as key:value pairs:
+Backup only VMs that have specific tags or metadata. The script uses OpenStack's `/servers/{server_id}/tags` and `/servers/{server_id}/metadata` endpoints:
+
+**OpenStack Tags** (from `/servers/{server_id}/tags`):
+- Tags are just names (no values)
+- Format: `tagname:` or `tagname` (value part is ignored)
+- Example: `--vm-tags backup:` or `--vm-tags production:`
+
+**Metadata** (from `/servers/{server_id}/metadata`):
+- Metadata are key:value pairs
+- Format: `key:value`
+- Example: `--vm-tags backup:true` or `--vm-tags env:prod`
 
 ```bash
-# Single tag: backup only VMs with backup=true
+# Using OpenStack tags (tag name only)
+./protect-ostack.sh \
+  --keystone-url https://keystone.example.com:5000/v3 \
+  --project myproject \
+  --user myuser \
+  --password mypass \
+  --vm-tags backup:
+
+# Using metadata (key:value pairs)
 ./protect-ostack.sh \
   --keystone-url https://keystone.example.com:5000/v3 \
   --project myproject \
@@ -106,7 +124,7 @@ Backup only VMs that have specific metadata tags. Tags are checked as key:value 
   --password mypass \
   --vm-tags backup:true
 
-# Multiple tags: backup VMs with both env=prod AND team=ops (all must match)
+# Multiple filters: backup VMs with both env=prod AND team=ops (all must match)
 ./protect-ostack.sh \
   --keystone-url https://keystone.example.com:5000/v3 \
   --project myproject \
@@ -124,7 +142,7 @@ Backup only VMs that have specific metadata tags. Tags are checked as key:value 
   --vm-tags backup:enabled
 ```
 
-**Note**: Tag filtering requires fetching full VM details for each VM, which may be slower for large deployments. Use name filtering first to reduce the number of VMs checked.
+**Note**: The script checks both tags and metadata endpoints. For tags, only the tag name is checked (value is ignored). For metadata, both key and value must match. Tag filtering may be slower for large deployments - use name filtering first to reduce the number of VMs checked.
 
 ### Manual VM List
 
@@ -196,7 +214,9 @@ Supported formats: `qcow2` (default), `raw`, `vmdk`, `vdi`
 - `--discover-all` - Discover all VMs automatically (default: `true`)
 - `--no-discover-all` - Disable automatic VM discovery
 - `--vm-filter PATTERN` - Filter VMs by name pattern (e.g., `"prod-*"`, `"web-*"`)
-- `--vm-tags KEY:VALUE[,KEY2:VALUE2]` - Filter VMs by metadata tags (all tags must match)
+- `--vm-tags KEY:VALUE[,KEY2:VALUE2]` - Filter VMs by OpenStack tags or metadata (all must match)
+  - For tags: use `tagname:` (checks `/servers/{id}/tags` endpoint)
+  - For metadata: use `key:value` (checks `/servers/{id}/metadata` endpoint)
 - `--vm-list VM1 VM2 ...` - Manual VM list (disables auto-discovery)
 - `--help` or `-h` - Show usage information
 
@@ -217,7 +237,9 @@ Supported formats: `qcow2` (default), `raw`, `vmdk`, `vdi`
 4. **VM Configuration Backup** (for each VM):
    - Retrieves complete VM details from Nova API
    - Saves VM configuration as JSON file (`vm-config.json`)
-   - Includes: metadata, flavor, networks, security groups, key pairs, image info, etc.
+   - Explicitly fetches and saves OpenStack tags from `/servers/{id}/tags` to `vm-tags.json`
+   - Explicitly fetches and saves metadata from `/servers/{id}/metadata` to `vm-metadata.json`
+   - Includes: flavor, networks, security groups, key pairs, image info, etc.
 5. **Volume Backup Process** (for each volume):
    - Creates a snapshot of the volume
    - Creates a temporary volume from the snapshot
@@ -232,30 +254,47 @@ Supported formats: `qcow2` (default), `raw`, `vmdk`, `vdi`
 /backup/openstack/
 ├── vm1/
 │   └── 2026-01-27_14-30/
-│       ├── vm-config.json          # VM configuration (metadata, flavor, networks, etc.)
+│       ├── vm-config.json          # Complete VM configuration
+│       ├── vm-tags.json            # OpenStack server tags
+│       ├── vm-metadata.json        # VM metadata (key:value pairs)
 │       ├── volume-uuid-1.qcow2     # Volume backups (default: QCOW2 format)
 │       └── volume-uuid-2.qcow2
 ├── vm2/
 │   └── 2026-01-27_14-30/
 │       ├── vm-config.json
+│       ├── vm-tags.json
+│       ├── vm-metadata.json
 │       └── volume-uuid-3.qcow2
 └── vm3/
     └── 2026-01-27_14-35/
         ├── vm-config.json
+        ├── vm-tags.json
+        ├── vm-metadata.json
         └── volume-uuid-4.qcow2
 ```
 
-### VM Configuration File (`vm-config.json`)
+### VM Configuration Files
 
-The `vm-config.json` file contains complete VM configuration including:
+**`vm-config.json`** - Complete VM configuration including:
 - **Basic Info**: Name, ID, status, creation date
 - **Flavor**: CPU, RAM, disk specifications
 - **Networks**: Network interfaces, IP addresses, MAC addresses
 - **Security Groups**: All associated security groups
 - **Key Pairs**: SSH key pair information
 - **Image**: Source image details
-- **Metadata**: Custom metadata tags
 - **Availability Zone**: VM placement information
+
+**`vm-tags.json`** - OpenStack server tags:
+- Contains all tags associated with the VM
+- Format: `{"tags": ["tag1", "tag2", ...]}`
+- Retrieved from `/servers/{server_id}/tags` endpoint
+- Empty tags array if no tags exist
+
+**`vm-metadata.json`** - VM metadata (key:value pairs):
+- Contains all metadata associated with the VM
+- Format: `{"metadata": {"key1": "value1", "key2": "value2", ...}}`
+- Retrieved from `/servers/{server_id}/metadata` endpoint
+- Empty metadata object if no metadata exists
 
 ## Configuration
 
@@ -336,8 +375,11 @@ done
 - Check if `all_tenants=1` parameter is required (script includes it)
 - **VM Status**: Only VMs in `ACTIVE`, `SHUTOFF`, `PAUSED`, or `SUSPENDED` states are backed up. VMs in `ERROR`, `DELETED`, `BUILDING`, `MIGRATING`, or other states are automatically skipped
 - **OpenStack Validation**: The script validates that discovered VMs are valid OpenStack servers. If a VM doesn't have required OpenStack fields (id, name, status), it will be skipped with a warning
-- **Tag Filtering Performance**: Tag filtering requires fetching full VM details for each VM, which can be slow for large deployments. Consider using `--vm-filter` first to reduce the number of VMs before applying tag filters
-- **Tag Filtering**: Ensure VMs have the expected metadata tags set. Tags are case-sensitive and must match exactly (e.g., `backup:true` vs `backup:True` are different)
+- **Tag Filtering Performance**: Tag filtering uses dedicated OpenStack endpoints (`/servers/{id}/tags` and `/servers/{id}/metadata`) which is more efficient than fetching full VM details. However, it still requires an API call per VM, so consider using `--vm-filter` first to reduce the number of VMs checked
+- **Tag Filtering**: 
+  - For OpenStack tags: Only the tag name is checked (value part after `:` is ignored). Tags are case-sensitive
+  - For metadata: Both key and value must match exactly (case-sensitive). Example: `backup:true` vs `backup:True` are different
+  - The script checks both endpoints - if a tag exists in either location, it will match
 
 ### VM Configuration Backup Issues
 
