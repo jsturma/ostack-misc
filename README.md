@@ -227,7 +227,7 @@ Supported formats: `qcow2` (default), `raw`, `vmdk`, `vdi`
 ```mermaid
 sequenceDiagram
   autonumber
-  actor Runner as User/Cron
+  actor Runner as User or Cron
   participant S as protect-ostack.sh
   participant K as Keystone
   participant N as Nova
@@ -236,24 +236,24 @@ sequenceDiagram
   participant FS as Filesystem
 
   Runner->>S: Run with CLI args
-  S->>S: Check deps (curl, jq)\nParse args\nmkdir -p BACKUP_DIR
+  S->>S: Check deps (curl, jq)<br/>Parse args<br/>mkdir -p BACKUP_DIR
 
   S->>K: POST /auth/tokens (user/pass + project scope)
   K-->>S: X-Subject-Token + service catalog
-  S->>S: Discover Cinder/Nova/Glance endpoints\n(from catalog if not provided)
+  S->>S: Discover Cinder/Nova/Glance endpoints<br/>(from catalog if not provided)
 
   alt discover-all
     S->>N: GET /servers?all_tenants=1&limit=1000
     N-->>S: servers list (paged)
   else vm-list
     loop each VM name
-      S->>N: GET /servers?name={vm_name}
+      S->>N: GET /servers?name=<vm_name>
       N-->>S: server id
     end
   end
 
   loop each VM (name,id)
-    S->>N: GET /servers/{id} (validate id,name,status)
+    S->>N: GET /servers/<id> (validate id,name,status)
     N-->>S: server details (status)
     alt unsupported status or invalid server
       S-->>Runner: skip VM
@@ -262,9 +262,9 @@ sequenceDiagram
         S->>S: match --vm-filter
       end
       opt tag/metadata filter
-        S->>N: GET /servers/{id}/tags
+        S->>N: GET /servers/<id>/tags
         N-->>S: tags[]
-        S->>N: GET /servers/{id}/metadata
+        S->>N: GET /servers/<id>/metadata
         N-->>S: metadata{}
         S->>S: apply --vm-tags (tags and/or metadata)
       end
@@ -288,9 +288,9 @@ sequenceDiagram
           S->>G: POST /images (disk_format=DISK_FORMAT)
           G-->>S: image id
           S->>G: Poll image status until active
-          S->>G: GET /images/{id}/file
+          S->>G: GET /images/<id>/file
           G-->>S: image bytes
-          S->>FS: write volume.{DISK_FORMAT}
+          S->>FS: write volume.<format>
           S->>G: DELETE image
           S->>C: DELETE temp volume
           S->>C: DELETE snapshot
