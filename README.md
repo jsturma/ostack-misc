@@ -222,58 +222,84 @@ Supported formats: `qcow2` (default), `raw`, `vmdk`, `vdi`
 
 ## How It Works
 
-### Flowchart (Mermaid)
+### Sequence diagram (Mermaid)
 
 ```mermaid
-flowchart TD
-  A([Start]) --> B[Check deps: curl, jq]
-  B --> C[Parse args]
-  C --> D[mkdir -p BACKUP_DIR]
-  D --> E[Auth Keystone: POST /auth/tokens]
-  E --> F[Token + Service Catalog]
-  F --> G["Discover endpoints from catalog<br/>(Cinder/Nova/Glance) if not provided"]
+sequenceDiagram
+  autonumber
+  actor Runner as User/Cron
+  participant S as protect-ostack.sh
+  participant K as Keystone
+  participant N as Nova
+  participant C as Cinder
+  participant G as Glance
+  participant FS as Filesystem
 
-  G --> H{VM source}
-  H -->|discover-all| I[GET Nova /servers?all_tenants=1]
-  H -->|vm-list| J[Use provided VM names]
-  J --> K["Resolve name -> ID<br/>GET Nova /servers?name=..."]
-  I --> L[Iterate VMs]
-  K --> L
+  Runner->>S: Run with CLI args
+  S->>S: Check deps (curl, jq)\nParse args\nmkdir -p BACKUP_DIR
 
-  L --> M["Validate VM<br/>GET /servers/{id}<br/>require id,name,status"]
-  M --> N{"Status supported?<br/>ACTIVE/SHUTOFF/PAUSED/SUSPENDED"}
-  N -->|No| SKIP[Skip VM]
-  N -->|Yes| O{Name filter matches?}
-  O -->|No| SKIP
-  O -->|Yes| P{Tag/metadata filter set?}
-  P -->|No| Q[Create VM_DIR timestamp]
-  P -->|Yes| R["Check OpenStack tags<br/>GET /servers/{id}/tags<br/>and metadata<br/>GET /servers/{id}/metadata"]
-  R --> S{All filters match?}
-  S -->|No| SKIP
-  S -->|Yes| Q
+  S->>K: POST /auth/tokens (user/pass + project scope)
+  K-->>S: X-Subject-Token + service catalog
+  S->>S: Discover Cinder/Nova/Glance endpoints\n(from catalog if not provided)
 
-  Q --> T["Save VM config<br/>GET /servers/{id}<br/>-> vm-config.json"]
-  T --> U["Save tags<br/>GET /servers/{id}/tags<br/>-> vm-tags.json"]
-  U --> V["Save metadata<br/>GET /servers/{id}/metadata<br/>-> vm-metadata.json"]
+  alt discover-all
+    S->>N: GET /servers?all_tenants=1&limit=1000
+    N-->>S: servers list (paged)
+  else vm-list
+    loop each VM name
+      S->>N: GET /servers?name={vm_name}
+      N-->>S: server id
+    end
+  end
 
-  V --> W["Find attached volumes<br/>GET Cinder /volumes?all_tenants=1<br/>filter by attachments.server_id"]
-  W --> X{Volumes found?}
-  X -->|No| DONEVM[Done VM]
-  X -->|Yes| LOOPV[For each volume]
+  loop each VM (name,id)
+    S->>N: GET /servers/{id} (validate id,name,status)
+    N-->>S: server details (status)
+    alt unsupported status or invalid server
+      S-->>Runner: skip VM
+    else supported
+      opt name filter
+        S->>S: match --vm-filter
+      end
+      opt tag/metadata filter
+        S->>N: GET /servers/{id}/tags
+        N-->>S: tags[]
+        S->>N: GET /servers/{id}/metadata
+        N-->>S: metadata{}
+        S->>S: apply --vm-tags (tags and/or metadata)
+      end
 
-  LOOPV --> S1["Create snapshot<br/>POST Cinder /snapshots"]
-  S1 --> S2[Wait snapshot available]
-  S2 --> S3["Create temp volume<br/>POST Cinder /volumes<br/>from snapshot"]
-  S3 --> S4[Wait volume available]
-  S4 --> S5["Create image<br/>POST Glance /images<br/>(disk_format=DISK_FORMAT)"]
-  S5 --> S6[Wait image active]
-  S6 --> S7["Download image<br/>GET /images/{id}/file<br/>-> volume.{DISK_FORMAT}"]
-  S7 --> S8["Cleanup<br/>DELETE image, temp volume, snapshot"]
-  S8 --> LOOPV
+      S->>FS: write vm-config.json (server details)
+      S->>FS: write vm-tags.json (tags[])
+      S->>FS: write vm-metadata.json (metadata{})
 
-  DONEVM --> L
-  SKIP --> L
-  L --> Z([End])
+      S->>C: GET /volumes?all_tenants=1
+      C-->>S: volumes list (attachments)
+      alt no attached volumes
+        S-->>Runner: done VM
+      else volumes found
+        loop each volume
+          S->>C: POST /snapshots
+          C-->>S: snapshot id
+          S->>C: Poll snapshot status until available
+          S->>C: POST /volumes (from snapshot)
+          C-->>S: temp volume id
+          S->>C: Poll volume status until available
+          S->>G: POST /images (disk_format=DISK_FORMAT)
+          G-->>S: image id
+          S->>G: Poll image status until active
+          S->>G: GET /images/{id}/file
+          G-->>S: image bytes
+          S->>FS: write volume.{DISK_FORMAT}
+          S->>G: DELETE image
+          S->>C: DELETE temp volume
+          S->>C: DELETE snapshot
+        end
+      end
+    end
+  end
+
+  S-->>Runner: ALL BACKUPS COMPLETED
 ```
 
 1. **Authentication**: Authenticates with Keystone and retrieves the service catalog
