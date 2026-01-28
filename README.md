@@ -231,44 +231,44 @@ flowchart TD
   C --> D[mkdir -p BACKUP_DIR]
   D --> E[Auth Keystone: POST /auth/tokens]
   E --> F[Token + Service Catalog]
-  F --> G[Discover endpoints from catalog\n(Cinder/Nova/Glance) if not provided]
+  F --> G["Discover endpoints from catalog<br/>(Cinder/Nova/Glance) if not provided"]
 
   G --> H{VM source}
   H -->|discover-all| I[GET Nova /servers?all_tenants=1]
   H -->|vm-list| J[Use provided VM names]
-  J --> K[Resolve name -> ID\nGET Nova /servers?name=...]
+  J --> K["Resolve name -> ID<br/>GET Nova /servers?name=..."]
   I --> L[Iterate VMs]
   K --> L
 
-  L --> M[Validate VM\nGET /servers/{id}\nrequire id,name,status]
-  M --> N{Status supported?\nACTIVE/SHUTOFF/PAUSED/SUSPENDED}
+  L --> M["Validate VM<br/>GET /servers/{id}<br/>require id,name,status"]
+  M --> N{"Status supported?<br/>ACTIVE/SHUTOFF/PAUSED/SUSPENDED"}
   N -->|No| SKIP[Skip VM]
   N -->|Yes| O{Name filter matches?}
   O -->|No| SKIP
   O -->|Yes| P{Tag/metadata filter set?}
   P -->|No| Q[Create VM_DIR timestamp]
-  P -->|Yes| R[Check OpenStack tags\nGET /servers/{id}/tags\nand metadata\nGET /servers/{id}/metadata]
+  P -->|Yes| R["Check OpenStack tags<br/>GET /servers/{id}/tags<br/>and metadata<br/>GET /servers/{id}/metadata"]
   R --> S{All filters match?}
   S -->|No| SKIP
   S -->|Yes| Q
 
-  Q --> T[Save VM config\nGET /servers/{id}\n-> vm-config.json]
-  T --> U[Save tags\nGET /servers/{id}/tags\n-> vm-tags.json]
-  U --> V[Save metadata\nGET /servers/{id}/metadata\n-> vm-metadata.json]
+  Q --> T["Save VM config<br/>GET /servers/{id}<br/>-> vm-config.json"]
+  T --> U["Save tags<br/>GET /servers/{id}/tags<br/>-> vm-tags.json"]
+  U --> V["Save metadata<br/>GET /servers/{id}/metadata<br/>-> vm-metadata.json"]
 
-  V --> W[Find attached volumes\nGET Cinder /volumes?all_tenants=1\nfilter by attachments.server_id]
+  V --> W["Find attached volumes<br/>GET Cinder /volumes?all_tenants=1<br/>filter by attachments.server_id"]
   W --> X{Volumes found?}
   X -->|No| DONEVM[Done VM]
   X -->|Yes| LOOPV[For each volume]
 
-  LOOPV --> S1[Create snapshot\nPOST Cinder /snapshots]
+  LOOPV --> S1["Create snapshot<br/>POST Cinder /snapshots"]
   S1 --> S2[Wait snapshot available]
-  S2 --> S3[Create temp volume\nPOST Cinder /volumes\nfrom snapshot]
+  S2 --> S3["Create temp volume<br/>POST Cinder /volumes<br/>from snapshot"]
   S3 --> S4[Wait volume available]
-  S4 --> S5[Create image\nPOST Glance /images\n(disk_format=DISK_FORMAT)]
+  S4 --> S5["Create image<br/>POST Glance /images<br/>(disk_format=DISK_FORMAT)"]
   S5 --> S6[Wait image active]
-  S6 --> S7[Download image\nGET /images/{id}/file\n-> volume.{DISK_FORMAT}]
-  S7 --> S8[Cleanup\nDELETE image, temp volume, snapshot]
+  S6 --> S7["Download image<br/>GET /images/{id}/file<br/>-> volume.{DISK_FORMAT}"]
+  S7 --> S8["Cleanup<br/>DELETE image, temp volume, snapshot"]
   S8 --> LOOPV
 
   DONEVM --> L
