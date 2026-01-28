@@ -222,6 +222,60 @@ Supported formats: `qcow2` (default), `raw`, `vmdk`, `vdi`
 
 ## How It Works
 
+### Flowchart (Mermaid)
+
+```mermaid
+flowchart TD
+  A([Start]) --> B[Check deps: curl, jq]
+  B --> C[Parse args]
+  C --> D[mkdir -p BACKUP_DIR]
+  D --> E[Auth Keystone: POST /auth/tokens]
+  E --> F[Token + Service Catalog]
+  F --> G[Discover endpoints from catalog\n(Cinder/Nova/Glance) if not provided]
+
+  G --> H{VM source}
+  H -->|discover-all| I[GET Nova /servers?all_tenants=1]
+  H -->|vm-list| J[Use provided VM names]
+  J --> K[Resolve name -> ID\nGET Nova /servers?name=...]
+  I --> L[Iterate VMs]
+  K --> L
+
+  L --> M[Validate VM\nGET /servers/{id}\nrequire id,name,status]
+  M --> N{Status supported?\nACTIVE/SHUTOFF/PAUSED/SUSPENDED}
+  N -->|No| SKIP[Skip VM]
+  N -->|Yes| O{Name filter matches?}
+  O -->|No| SKIP
+  O -->|Yes| P{Tag/metadata filter set?}
+  P -->|No| Q[Create VM_DIR timestamp]
+  P -->|Yes| R[Check OpenStack tags\nGET /servers/{id}/tags\nand metadata\nGET /servers/{id}/metadata]
+  R --> S{All filters match?}
+  S -->|No| SKIP
+  S -->|Yes| Q
+
+  Q --> T[Save VM config\nGET /servers/{id}\n-> vm-config.json]
+  T --> U[Save tags\nGET /servers/{id}/tags\n-> vm-tags.json]
+  U --> V[Save metadata\nGET /servers/{id}/metadata\n-> vm-metadata.json]
+
+  V --> W[Find attached volumes\nGET Cinder /volumes?all_tenants=1\nfilter by attachments.server_id]
+  W --> X{Volumes found?}
+  X -->|No| DONEVM[Done VM]
+  X -->|Yes| LOOPV[For each volume]
+
+  LOOPV --> S1[Create snapshot\nPOST Cinder /snapshots]
+  S1 --> S2[Wait snapshot available]
+  S2 --> S3[Create temp volume\nPOST Cinder /volumes\nfrom snapshot]
+  S3 --> S4[Wait volume available]
+  S4 --> S5[Create image\nPOST Glance /images\n(disk_format=DISK_FORMAT)]
+  S5 --> S6[Wait image active]
+  S6 --> S7[Download image\nGET /images/{id}/file\n-> volume.{DISK_FORMAT}]
+  S7 --> S8[Cleanup\nDELETE image, temp volume, snapshot]
+  S8 --> LOOPV
+
+  DONEVM --> L
+  SKIP --> L
+  L --> Z([End])
+```
+
 1. **Authentication**: Authenticates with Keystone and retrieves the service catalog
 2. **Endpoint Discovery**: Extracts Cinder, Nova, and Glance endpoints from the service catalog
 3. **VM Discovery**: Discovers all VMs (or uses manual list) and filters by:
