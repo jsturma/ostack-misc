@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 520" font-family="sans-serif" font-size="11">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill=" #333"/>
+    </marker>
+    <marker id="arrowback" markerWidth="8" markerHeight="8" refX="1" refY="3" orient="auto">
+      <polygon points="8 0, 0 3, 8 6" fill="#333"/>
+    </marker>
+  </defs>
+  <rect width="720" height="520" fill="#fafafa"/>
+  <text x="360" y="18" text-anchor="middle" font-weight="bold" font-size="13">protect-ostack.sh  Backup flow</text>
+  <!-- Participants -->
+  <line x1="0" y1="38" x2="720" y2="38" stroke="#ccc" stroke-width="1"/>
+  <text x="45" y="32" text-anchor="middle">Runner</text>
+  <line x1="45" y1="38" x2="45" y2="500" stroke="#ddd" stroke-dasharray="2"/>
+  <text x="135" y="32" text-anchor="middle">Script</text>
+  <line x1="135" y1="38" x2="135" y2="500" stroke="#ddd" stroke-dasharray="2"/>
+  <text x="225" y="32" text-anchor="middle">Keystone</text>
+  <line x1="225" y1="38" x2="225" y2="500" stroke="#ddd" stroke-dasharray="2"/>
+  <text x="315" y="32" text-anchor="middle">Nova</text>
+  <line x1="315" y1="38" x2="315" y2="500" stroke="#ddd" stroke-dasharray="2"/>
+  <text x="405" y="32" text-anchor="middle">Cinder</text>
+  <line x1="405" y1="38" x2="405" y2="500" stroke="#ddd" stroke-dasharray="2"/>
+  <text x="495" y="32" text-anchor="middle">Glance</text>
+  <line x1="495" y1="38" x2="495" y2="500" stroke="#ddd" stroke-dasharray="2"/>
+  <text x="585" y="32" text-anchor="middle">FS</text>
+  <line x1="585" y1="38" x2="585" y2="500" stroke="#ddd" stroke-dasharray="2"/>
+  <!-- Messages -->
+  <line x1="45" y1="58" x2="135" y2="58" stroke="#333" marker-end="url(#arrow)"/>
+  <text x="90" y="54">Run (CLI args)</text>
+  <line x1="135" y1="78" x2="135" y2="78" stroke="#333"/>
+  <text x="140" y="74">deps, parse, mkdir</text>
+  <line x1="135" y1="98" x2="225" y2="98" stroke="#333" marker-end="url(#arrow)"/>
+  <text x="175" y="94">POST /auth/tokens</text>
+  <line x1="225" y1="118" x2="135" y2="118" stroke="#333" marker-end="url(#arrowback)"/>
+  <text x="175" y="114">Token + catalog</text>
+  <line x1="135" y1="138" x2="315" y2="138" stroke="#333" marker-end="url(#arrow)"/>
+  <text x="220" y="134">GET /servers (list)</text>
+  <line x1="315" y1="158" x2="135" y2="158" stroke="#333" marker-end="url(#arrowback)"/>
+  <text x="220" y="154">servers</text>
+  <line x1="135" y1="178" x2="315" y2="178" stroke="#333" marker-end="url(#arrow)"/>
+  <text x="218" y="174">GET /servers/id</text>
+  <line x1="315" y1="198" x2="135" y2="198" stroke="#333" marker-end="url(#arrowback)"/>
+  <text x="220" y="194">details</text>
+  <line x1="135" y1="218" x2="315" y2="218" stroke="#333" marker-end="url(#arrow)"/>
+  <text x="210" y="214">tags, metadata</text>
+  <line x1="315" y1="238" x2="135" y2="238" stroke="#333" marker-end="url(#arrowback)"/>
+  <text x="220" y="234">tags[], metadata{}</text>
+  <line x1="135" y1="258" x2="585" y2="258" stroke="#333" marker-end="url(#arrow)"/>
+  <text x="355" y="254">vm-config, tags, metadata</text>
+  <line x1="135" y1="278" x2="405" y2="278" stroke="#333" marker-end="url(#arrow)"/>
+  <text x="265" y="274">GET /volumes</text>
+  <line x1="405" y1="298" x2="135" y2="298" stroke="#333" marker-end="url(#arrowback)"/>
+  <text x="265" y="294">volumes</text>
+  <line x1="135" y1="318" x2="405" y2="318" stroke="#333" marker-end="url(#arrow)"/>
+  <text x="265" y="314">POST /snapshots</text>
+  <line x1="405" y1="338" x2="135" y2="338" stroke="#333" marker-end="url(#arrowback)"/>
+  <text x="265" y="334">snapshot id</text>
+  <line x1="135" y1="358" x2="405" y2="358" stroke="#333" marker-end="url(#arrow)"/>
+  <text x="265" y="354">POST /volumes</text>
+  <line x1="405" y1="378" x2="135" y2="378" stroke="#333" marker-end="url(#arrowback)"/>
+  <text x="265" y="374">volume id</text>
+  <line x1="135" y1="398" x2="495" y2="398" stroke="#333" marker-end="url(#arrow)"/>
+  <text x="310" y="394">POST /images</text>
+  <line x1="495" y1="418" x2="135" y2="418" stroke="#333" marker-end="url(#arrowback)"/>
+  <text x="310" y="414">image id</text>
+  <line x1="135" y1="438" x2="495" y2="438" stroke="#333" marker-end="url(#arrow)"/>
+  <text x="310" y="434">GET /images/id/file</text>
+  <line x1="495" y1="458" x2="135" y2="458" stroke="#333" marker-end="url(#arrowback)"/>
+  <text x="310" y="454">image bytes</text>
+  <line x1="135" y1="478" x2="585" y2="478" stroke="#333" marker-end="url(#arrow)"/>
+  <text x="355" y="474">write volume.qcow2</text>
+  <line x1="135" y1="498" x2="45" y2="498" stroke="#333" marker-end="url(#arrowback)"/>
+  <text x="88" y="494">ALL BACKUPS COMPLETED</text>
+</svg>

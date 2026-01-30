@@ -1,0 +1,73 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Backup flow" id="backup-flow">
+    <mxGraphModel dx="800" dy="500" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="protect-ostack.sh — Backup flow" style="text;html=1;fontStyle=1;fontSize=13;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="280" y="20" width="260" height="24" as="geometry"/>
+        </mxCell>
+        <mxCell id="runner" value="Runner" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;size=20;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="40" y="60" width="60" height="400" as="geometry"/>
+        </mxCell>
+        <mxCell id="script" value="protect-ostack.sh" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;size=20;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="140" y="60" width="80" height="400" as="geometry"/>
+        </mxCell>
+        <mxCell id="keystone" value="Keystone" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;size=20;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="260" y="60" width="70" height="400" as="geometry"/>
+        </mxCell>
+        <mxCell id="nova" value="Nova" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;size=20;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="370" y="60" width="60" height="400" as="geometry"/>
+        </mxCell>
+        <mxCell id="cinder" value="Cinder" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;size=20;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="470" y="60" width="60" height="400" as="geometry"/>
+        </mxCell>
+        <mxCell id="glance" value="Glance" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;size=20;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="570" y="60" width="60" height="400" as="geometry"/>
+        </mxCell>
+        <mxCell id="fs" value="Filesystem" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;size=20;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="670" y="60" width="70" height="400" as="geometry"/>
+        </mxCell>
+        <mxCell id="m1" value="Run (CLI args)" style="endArrow=block;html=1;exitX=1;exitY=0.25;entryX=0;entryY=0.25;entryPerimeter=0;" edge="1" parent="1" source="runner" target="script">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m2" value="POST /auth/tokens" style="endArrow=block;html=1;exitX=1;exitY=0.35;entryX=0;entryY=0.35;entryPerimeter=0;" edge="1" parent="1" source="script" target="keystone">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m3" value="Token + catalog" style="endArrow=open;html=1;endFill=0;exitX=0;exitY=0.4;entryX=1;entryY=0.4;entryPerimeter=0;" edge="1" parent="1" source="keystone" target="script">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m4" value="GET /servers" style="endArrow=block;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;entryPerimeter=0;" edge="1" parent="1" source="script" target="nova">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m5" value="servers list" style="endArrow=open;html=1;endFill=0;exitX=0;exitY=0.55;entryX=1;entryY=0.55;entryPerimeter=0;" edge="1" parent="1" source="nova" target="script">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m6" value="GET /servers/id, tags, metadata" style="endArrow=block;html=1;exitX=1;exitY=0.65;entryX=0;entryY=0.65;entryPerimeter=0;" edge="1" parent="1" source="script" target="nova">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m7" value="details, tags, metadata" style="endArrow=open;html=1;endFill=0;exitX=0;exitY=0.7;entryX=1;entryY=0.7;entryPerimeter=0;" edge="1" parent="1" source="nova" target="script">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m8" value="vm-config, tags, metadata" style="endArrow=block;html=1;exitX=1;exitY=0.75;entryX=0;entryY=0.75;entryPerimeter=0;" edge="1" parent="1" source="script" target="fs">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m9" value="GET /volumes, POST /snapshots, /volumes" style="endArrow=block;html=1;exitX=1;exitY=0.82;entryX=0;entryY=0.82;entryPerimeter=0;" edge="1" parent="1" source="script" target="cinder">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m10" value="POST /images, GET /file" style="endArrow=block;html=1;exitX=1;exitY=0.88;entryX=0;entryY=0.88;entryPerimeter=0;" edge="1" parent="1" source="script" target="glance">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m11" value="image bytes" style="endArrow=open;html=1;endFill=0;exitX=0;exitY=0.92;entryX=1;entryY=0.92;entryPerimeter=0;" edge="1" parent="1" source="glance" target="script">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m12" value="write volume.qcow2" style="endArrow=block;html=1;exitX=1;exitY=0.96;entryX=0;entryY=0.96;entryPerimeter=0;" edge="1" parent="1" source="script" target="fs">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m13" value="ALL BACKUPS COMPLETED" style="endArrow=open;html=1;endFill=0;exitX=0;exitY=0.98;entryX=1;entryY=0.98;entryPerimeter=0;" edge="1" parent="1" source="script" target="runner">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
