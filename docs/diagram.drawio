@@ -1,71 +1,79 @@
-<mxfile host="app.diagrams.net">
-  <diagram name="Backup flow" id="backup-flow">
-    <mxGraphModel dx="800" dy="500" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36" version="29.3.6">
+  <diagram name="OpenStack VM Backup Workflow" id="eWsnwDp4l89OyPZtAW-k">
+    <mxGraphModel dx="1298" dy="801" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
       <root>
-        <mxCell id="0"/>
-        <mxCell id="1" parent="0"/>
-        <mxCell id="title" value="protect-ostack.sh — Backup flow" style="text;html=1;fontStyle=1;fontSize=13;verticalAlign=middle;" vertex="1" parent="1">
-          <mxGeometry x="280" y="20" width="260" height="24" as="geometry"/>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-1" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Start Backup Process" vertex="1">
+          <mxGeometry height="50" width="180" x="20" y="20" as="geometry" />
         </mxCell>
-        <mxCell id="runner" value="Runner" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;size=20;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
-          <mxGeometry x="40" y="60" width="60" height="400" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="Authenticate to Keystone&#xa;Retrieve Service Catalog" vertex="1">
+          <mxGeometry height="70" width="260" x="20" y="100" as="geometry" />
         </mxCell>
-        <mxCell id="script" value="protect-ostack.sh" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;size=20;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
-          <mxGeometry x="140" y="60" width="80" height="400" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="Endpoint Discovery&#xa;Nova / Cinder / Glance" vertex="1">
+          <mxGeometry height="70" width="260" x="20" y="190" as="geometry" />
         </mxCell>
-        <mxCell id="keystone" value="Keystone" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;size=20;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
-          <mxGeometry x="260" y="60" width="70" height="400" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" value="VM Discovery&#xa;List VMs or Manual Selection" vertex="1">
+          <mxGeometry height="70" width="260" x="20" y="280" as="geometry" />
         </mxCell>
-        <mxCell id="nova" value="Nova" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;size=20;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
-          <mxGeometry x="370" y="60" width="60" height="400" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" value="OpenStack Validation&#xa;id, name, status" vertex="1">
+          <mxGeometry height="70" width="260" x="20" y="370" as="geometry" />
         </mxCell>
-        <mxCell id="cinder" value="Cinder" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;size=20;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
-          <mxGeometry x="470" y="60" width="60" height="400" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" value="Status Filtering&#xa;ACTIVE, SHUTOFF, PAUSED, SUSPENDED" vertex="1">
+          <mxGeometry height="80" width="300" x="20" y="460" as="geometry" />
         </mxCell>
-        <mxCell id="glance" value="Glance" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;size=20;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
-          <mxGeometry x="570" y="60" width="60" height="400" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-7" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" value="Skip VM&#xa;ERROR / BUILD / MIGRATING" vertex="1">
+          <mxGeometry height="70" width="220" x="360" y="460" as="geometry" />
         </mxCell>
-        <mxCell id="fs" value="Filesystem" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;size=20;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
-          <mxGeometry x="670" y="60" width="70" height="400" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-8" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Optional Filters&#xa;Name Pattern / Tags" vertex="1">
+          <mxGeometry height="70" width="260" x="20" y="570" as="geometry" />
         </mxCell>
-        <mxCell id="m1" value="Run (CLI args)" style="endArrow=block;html=1;exitX=1;exitY=0.25;entryX=0;entryY=0.25;entryPerimeter=0;" edge="1" parent="1" source="runner" target="script">
-          <mxGeometry relative="1" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-22" edge="1" parent="1" source="MuR3cxOQ_oXh7tXknHPc-9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="MuR3cxOQ_oXh7tXknHPc-10" value="">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="m2" value="POST /auth/tokens" style="endArrow=block;html=1;exitX=1;exitY=0.35;entryX=0;entryY=0.35;entryPerimeter=0;" edge="1" parent="1" source="script" target="keystone">
-          <mxGeometry relative="1" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-10" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" value="Volume Backup Loop&#xa;Snapshot → Temp Volume → Image → Download → Cleanup" vertex="1">
+          <mxGeometry height="110" width="360" x="360" y="660" as="geometry" />
         </mxCell>
-        <mxCell id="m3" value="Token + catalog" style="endArrow=open;html=1;endFill=0;exitX=0;exitY=0.4;entryX=1;entryY=0.4;entryPerimeter=0;" edge="1" parent="1" source="keystone" target="script">
-          <mxGeometry relative="1" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-24" edge="1" parent="1" source="MuR3cxOQ_oXh7tXknHPc-11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.478;entryY=1.027;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=none;endFill=0;startArrow=classic;startFill=1;" target="MuR3cxOQ_oXh7tXknHPc-10" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="530" y="780" as="targetPoint" />
+          </mxGeometry>
         </mxCell>
-        <mxCell id="m4" value="GET /servers" style="endArrow=block;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;entryPerimeter=0;" edge="1" parent="1" source="script" target="nova">
-          <mxGeometry relative="1" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-11" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Organize Backup&#xa;BACKUP_DIR/VM_NAME/TIMESTAMP" vertex="1">
+          <mxGeometry height="70" width="300" x="20" y="800" as="geometry" />
         </mxCell>
-        <mxCell id="m5" value="servers list" style="endArrow=open;html=1;endFill=0;exitX=0;exitY=0.55;entryX=1;entryY=0.55;entryPerimeter=0;" edge="1" parent="1" source="nova" target="script">
-          <mxGeometry relative="1" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-12" edge="1" parent="1" source="MuR3cxOQ_oXh7tXknHPc-1" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="MuR3cxOQ_oXh7tXknHPc-2">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="m6" value="GET /servers/id, tags, metadata" style="endArrow=block;html=1;exitX=1;exitY=0.65;entryX=0;entryY=0.65;entryPerimeter=0;" edge="1" parent="1" source="script" target="nova">
-          <mxGeometry relative="1" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-13" edge="1" parent="1" source="MuR3cxOQ_oXh7tXknHPc-2" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="MuR3cxOQ_oXh7tXknHPc-3">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="m7" value="details, tags, metadata" style="endArrow=open;html=1;endFill=0;exitX=0;exitY=0.7;entryX=1;entryY=0.7;entryPerimeter=0;" edge="1" parent="1" source="nova" target="script">
-          <mxGeometry relative="1" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-14" edge="1" parent="1" source="MuR3cxOQ_oXh7tXknHPc-3" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="MuR3cxOQ_oXh7tXknHPc-4">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="m8" value="vm-config, tags, metadata" style="endArrow=block;html=1;exitX=1;exitY=0.75;entryX=0;entryY=0.75;entryPerimeter=0;" edge="1" parent="1" source="script" target="fs">
-          <mxGeometry relative="1" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-15" edge="1" parent="1" source="MuR3cxOQ_oXh7tXknHPc-4" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="MuR3cxOQ_oXh7tXknHPc-5">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="m9" value="GET /volumes, POST /snapshots, /volumes" style="endArrow=block;html=1;exitX=1;exitY=0.82;entryX=0;entryY=0.82;entryPerimeter=0;" edge="1" parent="1" source="script" target="cinder">
-          <mxGeometry relative="1" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-16" edge="1" parent="1" source="MuR3cxOQ_oXh7tXknHPc-5" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="MuR3cxOQ_oXh7tXknHPc-6">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="m10" value="POST /images, GET /file" style="endArrow=block;html=1;exitX=1;exitY=0.88;entryX=0;entryY=0.88;entryPerimeter=0;" edge="1" parent="1" source="script" target="glance">
-          <mxGeometry relative="1" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-17" edge="1" parent="1" source="MuR3cxOQ_oXh7tXknHPc-6" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="MuR3cxOQ_oXh7tXknHPc-8">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="m11" value="image bytes" style="endArrow=open;html=1;endFill=0;exitX=0;exitY=0.92;entryX=1;entryY=0.92;entryPerimeter=0;" edge="1" parent="1" source="glance" target="script">
-          <mxGeometry relative="1" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-18" edge="1" parent="1" source="MuR3cxOQ_oXh7tXknHPc-6" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="MuR3cxOQ_oXh7tXknHPc-7">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="m12" value="write volume.qcow2" style="endArrow=block;html=1;exitX=1;exitY=0.96;entryX=0;entryY=0.96;entryPerimeter=0;" edge="1" parent="1" source="script" target="fs">
-          <mxGeometry relative="1" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-19" edge="1" parent="1" source="MuR3cxOQ_oXh7tXknHPc-8" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="MuR3cxOQ_oXh7tXknHPc-9">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="m13" value="ALL BACKUPS COMPLETED" style="endArrow=open;html=1;endFill=0;exitX=0;exitY=0.98;entryX=1;entryY=0.98;entryPerimeter=0;" edge="1" parent="1" source="script" target="runner">
-          <mxGeometry relative="1" as="geometry"/>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-21" edge="1" parent="1" source="MuR3cxOQ_oXh7tXknHPc-10" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="MuR3cxOQ_oXh7tXknHPc-11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-20" edge="1" parent="1" source="MuR3cxOQ_oXh7tXknHPc-9" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="MuR3cxOQ_oXh7tXknHPc-10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="MuR3cxOQ_oXh7tXknHPc-9" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="VM Configuration Backup&#xa;vm-config.json&#xa;vm-tags.json&#xa;vm-metadata.json" vertex="1">
+          <mxGeometry height="110" width="300" x="20" y="660" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
