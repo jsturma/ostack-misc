@@ -1,8 +1,8 @@
 # protect-ostack (Go)
 
-Pure Go port of the [bash backup script](../scripts/bash/protect-ostack.sh). Uses only the standard library (no external dependencies).
+Go port of the [bash backup script](../scripts/bash/protect-ostack.sh), using [Gophercloud v2](https://github.com/gophercloud/gophercloud) for OpenStack API access.
 
-OpenStack logic lives in the **ostack** library (`tools/ostack/`): Keystone auth and catalog, Nova (VMs, tags, metadata), Cinder (volumes, snapshots), Glance (images), and backup orchestration. `main.go` handles CLI flags and calls into the lib.
+OpenStack logic lives in the **ostack** library (`tools/ostack/`): Keystone v3 auth (project-scoped token), Nova (VMs, tags, metadata), Cinder (volumes, snapshots), Glance (images), and backup orchestration. Service endpoints are discovered from the Keystone catalog using the configured **region** (default: `RegionOne`). `main.go` handles CLI flags and calls into the lib.
 
 ## Build
 
@@ -22,8 +22,9 @@ Same options as the bash script. Example:
   --password mypass
 ```
 
-See [scripts/bash/README.md](../scripts/bash/README.md) for full documentation (features, options, backup layout, troubleshooting).
+Optional: `--region RegionOne` (default), `--domain Default`, `--backup-dir`, `--disk-format`, `--discover-all` / `--vm-list`, `--vm-filter`, `--vm-tags`. See [scripts/bash/README.md](../scripts/bash/README.md) for full documentation (features, options, backup layout, troubleshooting).
 
 ## Requirements
 
-- Go 1.21+
+- Go 1.22+
+- [Gophercloud v2](https://github.com/gophercloud/gophercloud) (go mod handles it)

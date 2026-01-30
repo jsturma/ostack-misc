@@ -1,56 +1,43 @@
 package ostack
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"net/http"
+
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 // GetAttachedVolumes returns volume IDs attached to the given server.
-func GetAttachedVolumes(client *http.Client, cinderURL, token, serverID string) ([]string, error) {
-	data, err := apiGet(client, cinderURL+"/volumes?all_tenants=1", token)
-	if err != nil {
-		return nil, err
-	}
-	var out struct {
-		Volumes []struct {
-			ID          string `json:"id"`
-			Attachments []struct {
-				ServerID string `json:"server_id"`
-			} `json:"attachments"`
-		} `json:"volumes"`
-	}
-	if err := json.Unmarshal(data, &out); err != nil {
-		return nil, err
-	}
+func GetAttachedVolumes(ctx context.Context, client *gophercloud.ServiceClient, serverID string) ([]string, error) {
 	var ids []string
-	for _, v := range out.Volumes {
-		for _, a := range v.Attachments {
-			if a.ServerID == serverID {
-				ids = append(ids, v.ID)
-				break
+	err := volumes.List(client, volumes.ListOpts{AllTenants: true}).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
+		volList, err := volumes.ExtractVolumes(page)
+		if err != nil {
+			return false, err
+		}
+		for _, v := range volList {
+			for _, a := range v.Attachments {
+				if a.ServerID == serverID {
+					ids = append(ids, v.ID)
+					break
+				}
 			}
 		}
-	}
-	return ids, nil
+		return true, nil
+	})
+	return ids, err
 }
 
 // GetVolumeSize returns the volume size in GB.
-func GetVolumeSize(client *http.Client, cinderURL, token, volID string) (int, error) {
-	data, err := apiGet(client, cinderURL+"/volumes/"+volID, token)
+func GetVolumeSize(ctx context.Context, client *gophercloud.ServiceClient, volID string) (int, error) {
+	v, err := volumes.Get(ctx, client, volID).Extract()
 	if err != nil {
 		return 0, err
 	}
-	var out struct {
-		Volume struct {
-			Size int `json:"size"`
-		} `json:"volume"`
-	}
-	if err := json.Unmarshal(data, &out); err != nil {
-		return 0, err
-	}
-	if out.Volume.Size == 0 {
+	if v.Size == 0 {
 		return 0, fmt.Errorf("invalid volume size")
 	}
-	return out.Volume.Size, nil
+	return v.Size, nil
 }

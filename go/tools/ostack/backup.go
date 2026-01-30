@@ -1,125 +1,127 @@
 package ostack
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/snapshots"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
+	"github.com/gophercloud/gophercloud/v2/openstack/image/v2/imagedata"
+	"github.com/gophercloud/gophercloud/v2/openstack/image/v2/images"
 )
 
-// BackupVolume creates a snapshot, temp volume, Glance image, downloads the image file, then cleans up.
-func BackupVolume(client *http.Client, cfg *Config, token, volID, backupDir string) error {
+// BackupVolume creates a snapshot, temp volume, uploads to Glance, downloads the image file, then cleans up.
+func BackupVolume(ctx context.Context, blockClient *gophercloud.ServiceClient, imageClient *gophercloud.ServiceClient, cfg *Config, volID, backupDir string) error {
 	timestamp := time.Now().Format("2006-01-02_1504")
 	log.Printf("Backing up volume %s", volID)
 
-	snapBody := map[string]interface{}{
-		"snapshot": map[string]interface{}{
-			"volume_id": volID,
-			"name":      "snap-" + volID + "-" + timestamp,
-			"force":     true,
-		},
-	}
-	snapJSON, _ := json.Marshal(snapBody)
-	snapResp, err := apiCall(client, http.MethodPost, cfg.CinderURL+"/snapshots", token, snapJSON)
+	// Create snapshot
+	snap, err := snapshots.Create(ctx, blockClient, snapshots.CreateOpts{
+		VolumeID: volID,
+		Name:     "snap-" + volID + "-" + timestamp,
+		Force:    true,
+	}).Extract()
 	if err != nil {
 		return err
 	}
-	var snapOut struct {
-		Snapshot struct {
-			ID string `json:"id"`
-		} `json:"snapshot"`
-	}
-	if err := json.Unmarshal(snapResp, &snapOut); err != nil || snapOut.Snapshot.ID == "" {
-		return fmt.Errorf("failed to create snapshot")
-	}
-	snapID := snapOut.Snapshot.ID
-	defer CleanupResource(client, "snapshot", snapID, cfg.CinderURL, cfg.GlanceURL, token)
+	snapID := snap.ID
+	defer func() {
+		if err := snapshots.Delete(ctx, blockClient, snapID).ExtractErr(); err != nil {
+			log.Printf("Warning: Failed to delete snapshot %s: %v", snapID, err)
+		} else {
+			log.Printf("Cleaned up snapshot: %s", snapID)
+		}
+	}()
 
-	if err := WaitStatus(client, "snapshot", snapID, "available", cfg.CinderURL, cfg.GlanceURL, token); err != nil {
-		return err
-	}
-
-	volSize, err := GetVolumeSize(client, cfg.CinderURL, token, volID)
+	err = snapshots.WaitForStatus(ctx, blockClient, snapID, "available")
 	if err != nil {
 		return err
 	}
+
+	vol, err := volumes.Get(ctx, blockClient, volID).Extract()
+	if err != nil {
+		return err
+	}
+	volSize := vol.Size
 	log.Printf("Creating temp volume (%dGB)", volSize)
-	volBody := map[string]interface{}{
-		"volume": map[string]interface{}{
-			"snapshot_id": snapID,
-			"size":        volSize,
-			"name":        "tmp-" + volID + "-" + timestamp,
-		},
-	}
-	volJSON, _ := json.Marshal(volBody)
-	volResp, err := apiCall(client, http.MethodPost, cfg.CinderURL+"/volumes", token, volJSON)
+
+	tmpVol, err := volumes.Create(ctx, blockClient, volumes.CreateOpts{
+		SnapshotID: snapID,
+		Size:       volSize,
+		Name:       "tmp-" + volID + "-" + timestamp,
+	}, nil).Extract()
 	if err != nil {
 		return err
 	}
-	var volOut struct {
-		Volume struct {
-			ID string `json:"id"`
-		} `json:"volume"`
-	}
-	if err := json.Unmarshal(volResp, &volOut); err != nil || volOut.Volume.ID == "" {
-		return fmt.Errorf("failed to create temp volume")
-	}
-	tmpVolID := volOut.Volume.ID
-	defer CleanupResource(client, "volume", tmpVolID, cfg.CinderURL, cfg.GlanceURL, token)
+	tmpVolID := tmpVol.ID
+	defer func() {
+		if err := volumes.Delete(ctx, blockClient, tmpVolID, volumes.DeleteOpts{}).ExtractErr(); err != nil {
+			log.Printf("Warning: Failed to delete volume %s: %v", tmpVolID, err)
+		} else {
+			log.Printf("Cleaned up volume: %s", tmpVolID)
+		}
+	}()
 
-	if err := WaitStatus(client, "volume", tmpVolID, "available", cfg.CinderURL, cfg.GlanceURL, token); err != nil {
+	err = volumes.WaitForStatus(ctx, blockClient, tmpVolID, "available")
+	if err != nil {
 		return err
 	}
 
 	log.Printf("Creating image (%s format)", cfg.DiskFormat)
-	imgBody := map[string]interface{}{
-		"name":             "img-" + volID + "-" + timestamp,
-		"disk_format":      cfg.DiskFormat,
-		"container_format": "bare",
-		"volume_id":       tmpVolID,
-	}
-	imgJSON, _ := json.Marshal(imgBody)
-	imgResp, err := apiCall(client, http.MethodPost, cfg.GlanceURL, token, imgJSON)
+	imgResult, err := volumes.UploadImage(ctx, blockClient, tmpVolID, volumes.UploadImageOpts{
+		ImageName: "img-" + volID + "-" + timestamp,
+		DiskFormat: cfg.DiskFormat,
+		ContainerFormat: "bare",
+	}).Extract()
 	if err != nil {
 		return err
 	}
-	var imgOut struct {
-		ID string `json:"id"`
-	}
-	if err := json.Unmarshal(imgResp, &imgOut); err != nil || imgOut.ID == "" {
-		return fmt.Errorf("failed to create image")
-	}
-	imgID := imgOut.ID
-	defer CleanupResource(client, "image", imgID, cfg.CinderURL, cfg.GlanceURL, token)
+	imgID := imgResult.ImageID
+	defer func() {
+		if err := images.Delete(ctx, imageClient, imgID).ExtractErr(); err != nil {
+			log.Printf("Warning: Failed to delete image %s: %v", imgID, err)
+		} else {
+			log.Printf("Cleaned up image: %s", imgID)
+		}
+	}()
 
-	if err := WaitStatus(client, "image", imgID, "active", cfg.CinderURL, cfg.GlanceURL, token); err != nil {
-		return err
+	// Wait for image to become active
+	deadline := time.Now().Add(StatusTimeout)
+	for time.Now().Before(deadline) {
+		img, err := images.Get(ctx, imageClient, imgID).Extract()
+		if err != nil {
+			return err
+		}
+		if img.Status == "active" {
+			log.Printf("Image %s is active", imgID)
+			break
+		}
+		if img.Status == "error" || img.Status == "killed" {
+			return fmt.Errorf("image %s entered %s state", imgID, img.Status)
+		}
+		time.Sleep(StatusInterval)
 	}
 
 	outPath := filepath.Join(backupDir, volID+"."+cfg.DiskFormat)
 	log.Printf("Downloading %s to %s", cfg.DiskFormat, outPath)
-	req, err := http.NewRequest(http.MethodGet, cfg.GlanceURL+"/"+imgID+"/file", nil)
+	res := imagedata.Download(ctx, imageClient, imgID)
+	rc, err := res.Extract()
 	if err != nil {
 		return err
 	}
-	req.Header.Set("X-Auth-Token", token)
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("download image: HTTP %d", resp.StatusCode)
-	}
+	defer rc.Close()
 	f, err := os.Create(outPath)
 	if err != nil {
 		return err
 	}
-	n, err := io.Copy(f, resp.Body)
+	n, err := io.Copy(f, rc)
 	f.Close()
 	if err != nil {
 		os.Remove(outPath)
@@ -134,8 +136,21 @@ func BackupVolume(client *http.Client, cfg *Config, token, volID, backupDir stri
 	return nil
 }
 
-// Run performs the full backup: discover or use VM list, then for each VM backup config and volumes.
-func Run(client *http.Client, cfg *Config, token string) error {
+// Run performs the full backup using Gophercloud: discover or use VM list, then for each VM backup config and volumes.
+func Run(ctx context.Context, provider *gophercloud.ProviderClient, cfg *Config) error {
+	computeClient, err := openstack.NewComputeV2(provider, gophercloud.EndpointOpts{Region: cfg.Region})
+	if err != nil {
+		return fmt.Errorf("compute client: %w", err)
+	}
+	blockClient, err := openstack.NewBlockStorageV3(provider, gophercloud.EndpointOpts{Region: cfg.Region})
+	if err != nil {
+		return fmt.Errorf("block storage client: %w", err)
+	}
+	imageClient, err := openstack.NewImageV2(provider, gophercloud.EndpointOpts{Region: cfg.Region})
+	if err != nil {
+		return fmt.Errorf("image client: %w", err)
+	}
+
 	var vms []VMPair
 	if cfg.DiscoverAll {
 		if cfg.VMFilter != "" {
@@ -144,7 +159,7 @@ func Run(client *http.Client, cfg *Config, token string) error {
 		if cfg.VMTags != "" {
 			log.Printf("VM tag filter: %s", cfg.VMTags)
 		}
-		discovered, err := DiscoverAllVMs(client, cfg, token)
+		discovered, err := DiscoverAllVMs(ctx, computeClient, cfg)
 		if err != nil {
 			return err
 		}
@@ -157,7 +172,7 @@ func Run(client *http.Client, cfg *Config, token string) error {
 	} else {
 		log.Println("Using manual VM list")
 		for _, name := range cfg.VMList {
-			id, err := GetVMID(client, cfg.NovaURL, token, name)
+			id, err := GetVMID(ctx, computeClient, name)
 			if err != nil {
 				log.Printf("VM %q not found or invalid: %v", name, err)
 				continue
@@ -167,7 +182,7 @@ func Run(client *http.Client, cfg *Config, token string) error {
 	}
 
 	for _, v := range vms {
-		if !ValidateVM(client, cfg.NovaURL, token, v.ID) {
+		if !ValidateVM(ctx, computeClient, v.ID) {
 			log.Printf("Skipping %s (invalid OpenStack VM)", v.Name)
 			continue
 		}
@@ -177,10 +192,10 @@ func Run(client *http.Client, cfg *Config, token string) error {
 			log.Printf("Failed to create %s: %v", vmDir, err)
 			continue
 		}
-		if err := BackupVMConfig(client, cfg.NovaURL, token, v.ID, vmDir); err != nil {
+		if err := BackupVMConfig(ctx, computeClient, v.ID, vmDir); err != nil {
 			log.Printf("Failed VM config backup for %s: %v", v.Name, err)
 		}
-		vols, err := GetAttachedVolumes(client, cfg.CinderURL, token, v.ID)
+		vols, err := GetAttachedVolumes(ctx, blockClient, v.ID)
 		if err != nil {
 			log.Printf("Failed to list volumes for %s: %v", v.Name, err)
 			continue
@@ -190,7 +205,7 @@ func Run(client *http.Client, cfg *Config, token string) error {
 			continue
 		}
 		for _, volID := range vols {
-			if err := BackupVolume(client, cfg, token, volID, vmDir); err != nil {
+			if err := BackupVolume(ctx, blockClient, imageClient, cfg, volID, vmDir); err != nil {
 				log.Printf("Failed volume %s: %v", volID, err)
 			}
 		}

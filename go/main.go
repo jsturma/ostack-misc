@@ -1,7 +1,8 @@
-// protect-ostack — Backup OpenStack VMs and their Cinder volumes (pure Go, stdlib only).
+// protect-ostack — Backup OpenStack VMs and their Cinder volumes (Go + Gophercloud).
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -15,8 +16,8 @@ func usage() {
 	fmt.Fprintf(os.Stderr, `Usage: protect-ostack [OPTIONS]
 
 Required: --keystone-url URL --project NAME --user NAME --password PASSWORD
-Optional: [--cinder-url URL] [--nova-url URL] [--glance-url URL] [--domain NAME]
-         [--backup-dir DIR] [--disk-format FORMAT] [--discover-all] [--vm-filter PATTERN] [--vm-tags KEY:VALUE] [--vm-list VM1 VM2 ...]
+Optional: [--region NAME] [--domain NAME] [--backup-dir DIR] [--disk-format FORMAT]
+         [--discover-all] [--vm-filter PATTERN] [--vm-tags KEY:VALUE] [--vm-list VM1 VM2 ...]
          [--help]
          Format options: qcow2 (default), raw, vmdk, vdi
          Tag filter: --vm-tags backup:true or --vm-tags env:prod,team:ops
@@ -31,14 +32,13 @@ Examples:
 func parseFlags() *ostack.Config {
 	cfg := &ostack.Config{
 		Domain:      ostack.DefaultDomain,
+		Region:      ostack.DefaultRegion,
 		BackupDir:   "/backup/openstack",
 		DiskFormat:  "qcow2",
 		DiscoverAll: true,
 	}
-	flag.StringVar(&cfg.KeystoneURL, "keystone-url", "", "Keystone endpoint (required)")
-	flag.StringVar(&cfg.CinderURL, "cinder-url", "", "Cinder endpoint (auto-discovered if omitted)")
-	flag.StringVar(&cfg.NovaURL, "nova-url", "", "Nova endpoint (auto-discovered if omitted)")
-	flag.StringVar(&cfg.GlanceURL, "glance-url", "", "Glance endpoint (auto-discovered if omitted)")
+	flag.StringVar(&cfg.KeystoneURL, "keystone-url", "", "Keystone endpoint (required, e.g. https://keystone.example.com:5000/v3)")
+	flag.StringVar(&cfg.Region, "region", ostack.DefaultRegion, "OpenStack region for service discovery")
 	flag.StringVar(&cfg.Project, "project", "", "OpenStack project (required)")
 	flag.StringVar(&cfg.User, "user", "", "OpenStack user (required)")
 	flag.StringVar(&cfg.Password, "password", "", "OpenStack password (required)")
@@ -63,7 +63,9 @@ func parseFlags() *ostack.Config {
 	if !ostack.SupportedDiskFormats[cfg.DiskFormat] {
 		log.Fatalf("Invalid disk format: %s (supported: qcow2, raw, vmdk, vdi)", cfg.DiskFormat)
 	}
-	ostack.NormalizeURLs(cfg)
+	if cfg.Region == "" {
+		cfg.Region = ostack.DefaultRegion
+	}
 	return cfg
 }
 
@@ -73,25 +75,17 @@ func main() {
 	if err := os.MkdirAll(cfg.BackupDir, 0755); err != nil {
 		log.Fatalf("Cannot create backup dir: %v", err)
 	}
-	log.Printf("Starting backup - Keystone: %s, Project: %s, User: %s, Dir: %s",
-		cfg.KeystoneURL, cfg.Project, cfg.User, cfg.BackupDir)
+	log.Printf("Starting backup - Keystone: %s, Project: %s, Region: %s, Dir: %s",
+		cfg.KeystoneURL, cfg.Project, cfg.Region, cfg.BackupDir)
 
-	client := ostack.NewClient()
-	token, catalog, err := ostack.GetTokenAndCatalog(client, cfg)
+	ctx := context.Background()
+	provider, err := ostack.NewProvider(ctx, cfg)
 	if err != nil {
 		log.Fatalf("Auth failed: %v", err)
 	}
-	log.Println("Token obtained")
+	log.Println("Authenticated with OpenStack (Gophercloud)")
 
-	if err := ostack.DiscoverServiceEndpoints(cfg, catalog); err != nil {
-		log.Fatal(err)
-	}
-	if cfg.CinderURL == "" || cfg.NovaURL == "" || cfg.GlanceURL == "" {
-		log.Fatal("Service URLs not configured")
-	}
-	log.Printf("Endpoints - Cinder: %s, Nova: %s, Glance: %s", cfg.CinderURL, cfg.NovaURL, cfg.GlanceURL)
-
-	if err := ostack.Run(client, cfg, token); err != nil {
+	if err := ostack.Run(ctx, provider, cfg); err != nil {
 		log.Fatal(err)
 	}
 	log.Println("=== ALL BACKUPS COMPLETED ===")
