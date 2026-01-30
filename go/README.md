@@ -2,7 +2,7 @@
 
 Go port of the [bash backup script](../scripts/bash/protect-ostack.sh), using [Gophercloud v2](https://github.com/gophercloud/gophercloud) for OpenStack API access.
 
-OpenStack logic lives in the **ostack** library (`tools/ostack/`): Keystone v3 auth (project-scoped token), Nova (VMs, tags, metadata), Cinder (volumes, snapshots), Glance (images), and backup orchestration. Service endpoints are discovered from the Keystone catalog using the configured **region** (default: `RegionOne`). `main.go` handles CLI flags and calls into the lib.
+OpenStack logic lives in the **ostack** library (`tools/ostack/`): Keystone v3 auth (project-scoped token), Nova (VMs, tags, metadata), Cinder (volumes, snapshots), Glance (images), and backup orchestration. Service endpoints are discovered from the Keystone catalog using the configured **region** (default: `RegionOne`). **Backups run in parallel**: all VMs are backed up concurrently, and within each VM all volume backups run concurrently. `main.go` handles CLI flags and calls into the lib.
 
 ## Build
 

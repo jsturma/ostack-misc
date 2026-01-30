@@ -15,6 +15,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/v2/openstack/image/v2/imagedata"
 	"github.com/gophercloud/gophercloud/v2/openstack/image/v2/images"
+	"golang.org/x/sync/errgroup"
 )
 
 // BackupVolume creates a snapshot, temp volume, uploads to Glance, downloads the image file, then cleans up.
@@ -136,7 +137,7 @@ func BackupVolume(ctx context.Context, blockClient *gophercloud.ServiceClient, i
 	return nil
 }
 
-// Run performs the full backup using Gophercloud: discover or use VM list, then for each VM backup config and volumes.
+// Run performs the full backup using Gophercloud: discover or use VM list, then backs up all VMs in parallel; within each VM, volume backups run in parallel.
 func Run(ctx context.Context, provider *gophercloud.ProviderClient, cfg *Config) error {
 	computeClient, err := openstack.NewComputeV2(provider, gophercloud.EndpointOpts{Region: cfg.Region})
 	if err != nil {
@@ -181,35 +182,46 @@ func Run(ctx context.Context, provider *gophercloud.ProviderClient, cfg *Config)
 		}
 	}
 
+	g, gCtx := errgroup.WithContext(ctx)
 	for _, v := range vms {
-		if !ValidateVM(ctx, computeClient, v.ID) {
+		v := v
+		if !ValidateVM(gCtx, computeClient, v.ID) {
 			log.Printf("Skipping %s (invalid OpenStack VM)", v.Name)
 			continue
 		}
-		log.Printf("==== VM: %s (ID: %s) ====", v.Name, v.ID)
-		vmDir := filepath.Join(cfg.BackupDir, v.Name, time.Now().Format("2006-01-02_15-04"))
-		if err := os.MkdirAll(vmDir, 0755); err != nil {
-			log.Printf("Failed to create %s: %v", vmDir, err)
-			continue
-		}
-		if err := BackupVMConfig(ctx, computeClient, v.ID, vmDir); err != nil {
-			log.Printf("Failed VM config backup for %s: %v", v.Name, err)
-		}
-		vols, err := GetAttachedVolumes(ctx, blockClient, v.ID)
-		if err != nil {
-			log.Printf("Failed to list volumes for %s: %v", v.Name, err)
-			continue
-		}
-		if len(vols) == 0 {
-			log.Printf("No volumes for %s", v.Name)
-			continue
-		}
-		for _, volID := range vols {
-			if err := BackupVolume(ctx, blockClient, imageClient, cfg, volID, vmDir); err != nil {
-				log.Printf("Failed volume %s: %v", volID, err)
+		g.Go(func() error {
+			log.Printf("==== VM: %s (ID: %s) ====", v.Name, v.ID)
+			vmDir := filepath.Join(cfg.BackupDir, v.Name, time.Now().Format("2006-01-02_15-04"))
+			if err := os.MkdirAll(vmDir, 0755); err != nil {
+				return fmt.Errorf("create %s: %w", vmDir, err)
 			}
-		}
-		log.Printf("Completed: %s", v.Name)
+			if err := BackupVMConfig(gCtx, computeClient, v.ID, vmDir); err != nil {
+				log.Printf("Failed VM config backup for %s: %v", v.Name, err)
+			}
+			vols, err := GetAttachedVolumes(gCtx, blockClient, v.ID)
+			if err != nil {
+				return fmt.Errorf("%s: list volumes: %w", v.Name, err)
+			}
+			if len(vols) == 0 {
+				log.Printf("No volumes for %s", v.Name)
+				return nil
+			}
+			g2, g2Ctx := errgroup.WithContext(gCtx)
+			for _, volID := range vols {
+				volID := volID
+				g2.Go(func() error {
+					if err := BackupVolume(g2Ctx, blockClient, imageClient, cfg, volID, vmDir); err != nil {
+						return fmt.Errorf("volume %s: %w", volID, err)
+					}
+					return nil
+				})
+			}
+			if err := g2.Wait(); err != nil {
+				return fmt.Errorf("%s: %w", v.Name, err)
+			}
+			log.Printf("Completed: %s", v.Name)
+			return nil
+		})
 	}
-	return nil
+	return g.Wait()
 }
