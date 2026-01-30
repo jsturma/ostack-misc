@@ -53,6 +53,10 @@ secure.yaml
 *.out
 *.err
 
+# Go build
+go/protect-ostack
+go/*.exe
+
 # Test files
 test/
 tests/
