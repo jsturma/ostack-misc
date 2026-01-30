@@ -9,7 +9,8 @@ import (
 )
 
 // WaitStatus polls a Cinder or Glance resource until it reaches wantStatus or times out.
-func WaitStatus(client *http.Client, typ, id, wantStatus, cinderURL, glanceURL, token string) error {
+// timeout and interval are taken from config (e.g. time.Duration(cfg.StatusTimeoutSec)*time.Second).
+func WaitStatus(client *http.Client, typ, id, wantStatus, cinderURL, glanceURL, token string, timeout, interval time.Duration) error {
 	var url string
 	switch typ {
 	case "volume", "snapshot":
@@ -19,7 +20,7 @@ func WaitStatus(client *http.Client, typ, id, wantStatus, cinderURL, glanceURL, 
 	default:
 		return fmt.Errorf("unknown type: %s", typ)
 	}
-	deadline := time.Now().Add(StatusTimeout)
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		data, err := apiGet(client, url, token)
 		if err != nil {
@@ -44,11 +45,11 @@ func WaitStatus(client *http.Client, typ, id, wantStatus, cinderURL, glanceURL, 
 		if current == "error" {
 			return fmt.Errorf("%s %s entered error state", typ, id)
 		}
-		elapsed := StatusTimeout - time.Until(deadline)
+		elapsed := timeout - time.Until(deadline)
 		if int(elapsed.Seconds())%30 == 0 && elapsed > 0 {
 			log.Printf("Waiting... (%ds, status: %s)", int(elapsed.Seconds()), current)
 		}
-		time.Sleep(StatusInterval)
+		time.Sleep(interval)
 	}
 	return fmt.Errorf("timeout waiting for %s %s", typ, id)
 }

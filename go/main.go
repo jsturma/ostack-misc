@@ -15,40 +15,52 @@ import (
 func usage() {
 	fmt.Fprintf(os.Stderr, `Usage: protect-ostack [OPTIONS]
 
-Required: --keystone-url URL --project NAME --user NAME --password PASSWORD
-Optional: [--region NAME] [--domain NAME] [--backup-dir DIR] [--disk-format FORMAT]
-         [--discover-all] [--vm-filter PATTERN] [--vm-tags KEY:VALUE] [--vm-list VM1 VM2 ...]
+Config: defaults from cfg/config.yaml (or --config PATH). CLI overrides config file.
+
+Required (in config or CLI): --keystone-url URL --project NAME --user NAME --password PASSWORD
+Optional: [--config PATH] [--region NAME] [--domain NAME] [--backup-dir DIR] [--disk-format FORMAT]
+         [--max-parallel-snap N] [--max-parallel-vol N] [--discover-all] [--vm-filter PATTERN] [--vm-tags KEY:VALUE] [--vm-list VM1 VM2 ...]
          [--help]
-         Format options: qcow2 (default), raw, vmdk, vdi
-         Tag filter: --vm-tags backup:true or --vm-tags env:prod,team:ops
 
 Examples:
   protect-ostack --keystone-url https://keystone.example.com:5000/v3 --project myproject --user myuser --password mypass
-  protect-ostack --keystone-url https://keystone.internal:5000/v3 --project backup --user backup-user --password secret --vm-filter "prod-*"
+  protect-ostack --config cfg/config.yaml
 `)
 	os.Exit(0)
 }
 
-func parseFlags() *ostack.Config {
-	cfg := &ostack.Config{
-		Domain:      ostack.DefaultDomain,
-		Region:      ostack.DefaultRegion,
-		BackupDir:   "/backup/openstack",
-		DiskFormat:  "qcow2",
-		DiscoverAll: true,
+func configPathFromArgs() string {
+	for i, a := range os.Args {
+		if (a == "--config" || a == "-config") && i+1 < len(os.Args) {
+			return os.Args[i+1]
+		}
 	}
-	flag.StringVar(&cfg.KeystoneURL, "keystone-url", "", "Keystone endpoint (required, e.g. https://keystone.example.com:5000/v3)")
-	flag.StringVar(&cfg.Region, "region", ostack.DefaultRegion, "OpenStack region for service discovery")
-	flag.StringVar(&cfg.Project, "project", "", "OpenStack project (required)")
-	flag.StringVar(&cfg.User, "user", "", "OpenStack user (required)")
-	flag.StringVar(&cfg.Password, "password", "", "OpenStack password (required)")
-	flag.StringVar(&cfg.Domain, "domain", ostack.DefaultDomain, "Domain")
-	flag.StringVar(&cfg.BackupDir, "backup-dir", "/backup/openstack", "Backup directory")
-	flag.StringVar(&cfg.DiskFormat, "disk-format", "qcow2", "Disk format: qcow2, raw, vmdk, vdi")
-	flag.BoolVar(&cfg.DiscoverAll, "discover-all", true, "Discover all VMs")
+	return ostack.DefaultConfigPath
+}
+
+func parseFlags() *ostack.Config {
+	configPath := configPathFromArgs()
+	cfg, err := ostack.LoadConfig(configPath)
+	if err != nil {
+		log.Fatalf("Load config %s: %v", configPath, err)
+	}
+
+	var configFilePath string
+	flag.StringVar(&configFilePath, "config", configPath, "Path to config file (YAML)")
+	flag.StringVar(&cfg.KeystoneURL, "keystone-url", cfg.KeystoneURL, "Keystone endpoint (e.g. https://keystone.example.com:5000/v3)")
+	flag.StringVar(&cfg.Project, "project", cfg.Project, "OpenStack project")
+	flag.StringVar(&cfg.User, "user", cfg.User, "OpenStack user")
+	flag.StringVar(&cfg.Password, "password", cfg.Password, "OpenStack password")
+	flag.StringVar(&cfg.Domain, "domain", cfg.Domain, "Domain")
+	flag.StringVar(&cfg.Region, "region", cfg.Region, "OpenStack region for service discovery")
+	flag.StringVar(&cfg.BackupDir, "backup-dir", cfg.BackupDir, "Backup directory")
+	flag.StringVar(&cfg.DiskFormat, "disk-format", cfg.DiskFormat, "Disk format: qcow2, raw, vmdk, vdi")
+	flag.IntVar(&cfg.MaxParallelSnapShots, "max-parallel-snap", cfg.MaxParallelSnapShots, "Max concurrent VM backup tasks (snapshots); 0 = unlimited")
+	flag.IntVar(&cfg.MaxParallelVolumes, "max-parallel-vol", cfg.MaxParallelVolumes, "Max concurrent volume backups across all VMs; 0 = unlimited")
+	flag.BoolVar(&cfg.DiscoverAll, "discover-all", cfg.DiscoverAll, "Discover all VMs")
 	flag.BoolFunc("no-discover-all", "Use manual VM list", func(s string) error { cfg.DiscoverAll = false; return nil })
-	flag.StringVar(&cfg.VMFilter, "vm-filter", "", "Filter VMs by name (e.g. prod-*)")
-	flag.StringVar(&cfg.VMTags, "vm-tags", "", "Filter by tags/metadata (e.g. backup:true)")
+	flag.StringVar(&cfg.VMFilter, "vm-filter", cfg.VMFilter, "Filter VMs by name (e.g. prod-*)")
+	flag.StringVar(&cfg.VMTags, "vm-tags", cfg.VMTags, "Filter by tags/metadata (e.g. backup:true)")
 	flag.Func("vm-list", "Manual VM list (space-separated)", func(s string) error {
 		cfg.VMList = strings.Fields(s)
 		cfg.DiscoverAll = false
@@ -58,13 +70,10 @@ func parseFlags() *ostack.Config {
 	flag.Parse()
 
 	if cfg.KeystoneURL == "" || cfg.Project == "" || cfg.User == "" || cfg.Password == "" {
-		log.Fatal("Missing required flags: --keystone-url, --project, --user, --password")
+		log.Fatal("Missing required: keystone_url, project, user, password (set in cfg/config.yaml or via CLI)")
 	}
 	if !ostack.SupportedDiskFormats[cfg.DiskFormat] {
 		log.Fatalf("Invalid disk format: %s (supported: qcow2, raw, vmdk, vdi)", cfg.DiskFormat)
-	}
-	if cfg.Region == "" {
-		cfg.Region = ostack.DefaultRegion
 	}
 	return cfg
 }

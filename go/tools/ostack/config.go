@@ -1,12 +1,8 @@
 package ostack
 
-import "time"
-
 const (
-	StatusTimeout  = 1800 * time.Second
-	StatusInterval = 5 * time.Second
-	DefaultDomain  = "Default"
-	DefaultRegion  = "RegionOne"
+	DefaultConfigDir  = "cfg"
+	DefaultConfigPath = "cfg/config.yaml"
 )
 
 var (
@@ -15,23 +11,29 @@ var (
 )
 
 // Config holds OpenStack auth and backup options.
-// With Gophercloud, Compute/Cinder/Glance endpoints are discovered from the catalog using Region.
+// Loaded from YAML (default: cfg/config.yaml); CLI flags override.
 type Config struct {
-	KeystoneURL string
-	CinderURL   string // unused with Gophercloud; kept for CLI compatibility
-	NovaURL     string
-	GlanceURL   string
-	Project     string
-	User        string
-	Password    string
-	Domain      string
-	Region      string
-	BackupDir   string
-	DiskFormat  string
-	DiscoverAll bool
-	VMFilter    string
-	VMTags      string
-	VMList      []string
+	KeystoneURL string `yaml:"keystone_url"`
+	CinderURL   string `yaml:"cinder_url"`   // unused with Gophercloud
+	NovaURL     string `yaml:"nova_url"`
+	GlanceURL   string `yaml:"glance_url"`
+	Project     string `yaml:"project"`
+	User        string `yaml:"user"`
+	Password    string `yaml:"password"`
+	Domain      string `yaml:"domain"`
+	Region      string `yaml:"region"`
+	BackupDir   string `yaml:"backup_dir"`
+	DiskFormat  string `yaml:"disk_format"`
+	DiscoverAll bool   `yaml:"discover_all"`
+	VMFilter    string `yaml:"vm_filter"`
+	VMTags      string `yaml:"vm_tags"`
+	VMList      []string `yaml:"vm_list"`
+	MaxParallelSnapShots int `yaml:"max_parallel_snap_shots"`
+	MaxParallelVolumes   int `yaml:"max_parallel_volumes"`
+	// StatusTimeoutSec is max wait (seconds) for snapshot/volume/image to reach target status.
+	StatusTimeoutSec int `yaml:"status_timeout_sec"`
+	// StatusIntervalSec is poll interval (seconds) while waiting.
+	StatusIntervalSec int `yaml:"status_interval_sec"`
 }
 
 // VMPair holds a VM name and its OpenStack server ID.

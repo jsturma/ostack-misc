@@ -93,8 +93,10 @@ func BackupVolume(ctx context.Context, blockClient *gophercloud.ServiceClient, i
 		}
 	}()
 
-	// Wait for image to become active
-	deadline := time.Now().Add(StatusTimeout)
+	// Wait for image to become active (timeout/interval from config)
+	timeout := time.Duration(cfg.StatusTimeoutSec) * time.Second
+	interval := time.Duration(cfg.StatusIntervalSec) * time.Second
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		img, err := images.Get(ctx, imageClient, imgID).Extract()
 		if err != nil {
@@ -107,7 +109,7 @@ func BackupVolume(ctx context.Context, blockClient *gophercloud.ServiceClient, i
 		if img.Status == "error" || img.Status == "killed" {
 			return fmt.Errorf("image %s entered %s state", imgID, img.Status)
 		}
-		time.Sleep(StatusInterval)
+		time.Sleep(interval)
 	}
 
 	outPath := filepath.Join(backupDir, volID+"."+cfg.DiskFormat)
@@ -182,6 +184,19 @@ func Run(ctx context.Context, provider *gophercloud.ProviderClient, cfg *Config)
 		}
 	}
 
+	// Semaphore to limit concurrent VM backup tasks. Nil = unlimited.
+	var vmSem chan struct{}
+	if cfg.MaxParallelSnapShots > 0 {
+		vmSem = make(chan struct{}, cfg.MaxParallelSnapShots)
+		log.Printf("Limiting to %d concurrent VM backup tasks", cfg.MaxParallelSnapShots)
+	}
+	// Semaphore to limit concurrent volume backups (snapshot creation, etc.) across all VMs. Nil = unlimited.
+	var volSem chan struct{}
+	if cfg.MaxParallelVolumes > 0 {
+		volSem = make(chan struct{}, cfg.MaxParallelVolumes)
+		log.Printf("Limiting to %d concurrent volume backups (snapshots)", cfg.MaxParallelVolumes)
+	}
+
 	g, gCtx := errgroup.WithContext(ctx)
 	for _, v := range vms {
 		v := v
@@ -190,6 +205,14 @@ func Run(ctx context.Context, provider *gophercloud.ProviderClient, cfg *Config)
 			continue
 		}
 		g.Go(func() error {
+			if vmSem != nil {
+				select {
+				case vmSem <- struct{}{}:
+					defer func() { <-vmSem }()
+				case <-gCtx.Done():
+					return gCtx.Err()
+				}
+			}
 			log.Printf("==== VM: %s (ID: %s) ====", v.Name, v.ID)
 			vmDir := filepath.Join(cfg.BackupDir, v.Name, time.Now().Format("2006-01-02_15-04"))
 			if err := os.MkdirAll(vmDir, 0755); err != nil {
@@ -210,6 +233,14 @@ func Run(ctx context.Context, provider *gophercloud.ProviderClient, cfg *Config)
 			for _, volID := range vols {
 				volID := volID
 				g2.Go(func() error {
+					if volSem != nil {
+						select {
+						case volSem <- struct{}{}:
+							defer func() { <-volSem }()
+						case <-g2Ctx.Done():
+							return g2Ctx.Err()
+						}
+					}
 					if err := BackupVolume(g2Ctx, blockClient, imageClient, cfg, volID, vmDir); err != nil {
 						return fmt.Errorf("volume %s: %w", volID, err)
 					}
