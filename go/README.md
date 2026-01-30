@@ -1,5 +1,7 @@
 # protect-ostack (Go)
 
+**Source:** [github.com/jsturma/ostack-misc/tree/main/go](https://github.com/jsturma/ostack-misc/tree/main/go)
+
 Go port of the [bash backup script](../scripts/bash/protect-ostack.sh), using [Gophercloud v2](https://github.com/gophercloud/gophercloud) for OpenStack API access.
 
 OpenStack logic lives in the **ostack** library (`tools/ostack/`): Keystone v3 auth (project-scoped token), Nova (VMs, tags, metadata), Cinder (volumes, snapshots), Glance (images), and backup orchestration. **Defaults come from a YAML config file** (default path: `cfg/config.yaml`); CLI flags override. If the file is missing, it is created with defaults. Service endpoints are discovered from the Keystone catalog using the configured **region**. **Backups run in parallel**: all VMs are backed up concurrently, and within each VM all volume backups run concurrently. Use `--max-parallel-snap N` and `--max-parallel-vol N` to limit concurrency (0 = unlimited). `main.go` loads config and handles CLI flags.

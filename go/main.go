@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ostack-misc/protect-ostack/tools/ostack"
+	"github.com/jsturma/ostack-misc/go/tools/ostack"
 )
 
 func usage() {
